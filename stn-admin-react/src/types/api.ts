@@ -64,9 +64,22 @@ export interface STTSession {
 export interface ERPExtraction {
   id: number;
   session_id: number;
-  erp_data: ERPData;
+  "AS 및 지원"?: string;
+  "요청기관"?: string;
+  "작업국소"?: string;
+  "요청일"?: string;
+  "요청시간"?: string;
+  "요청자"?: string;
+  "지원인원수"?: string;
+  "지원요원"?: string;
+  "장비명"?: string;
+  "기종명"?: string;
+  "A/S기간만료여부"?: string;
+  "시스템명(고객사명)"?: string;
+  "요청 사항"?: string;
+  confidence_score?: number;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 // 음성 파일 정보

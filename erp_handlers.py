@@ -18,7 +18,6 @@ from postprocessor import postprocess_to_codes, convert_to_legacy_erp_format
 from payload_schema import validate_payload, get_validation_stats
 from gpt_extractor import ERPExtractor
 from supabase_client import get_supabase_manager
-import stt_handlers
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
@@ -27,17 +26,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api", tags=["ERP"])
 
 # 전역 변수들 (의존성 주입용)
-# erp_extractor는 stt_handlers에서 import
+erp_extractor = None
 
 
 def get_erp_extractor():
-    """ERP Extractor 의존성 (선택적)"""
-    # stt_handlers 모듈에서 현재 erp_extractor 가져오기
-    current_erp_extractor = getattr(stt_handlers, 'erp_extractor', None)
-    if current_erp_extractor is None:
-        logger.warning("ERP Extractor가 초기화되지 않았습니다. ERP 추출 기능이 비활성화됩니다.")
-        return None
-    return current_erp_extractor
+    """ERP Extractor 의존성 (지연 초기화)"""
+    global erp_extractor
+    if erp_extractor is None:
+        try:
+            logger.info("ERP Extractor 지연 초기화 중...")
+            erp_extractor = ERPExtractor()
+            logger.info("✅ ERP Extractor 초기화 완료")
+        except Exception as e:
+            logger.error(f"❌ ERP Extractor 초기화 실패: {e}")
+            return None
+    return erp_extractor
 
 
 def _build_enhanced_user_prompt(transcript_text: str, domain_data: dict) -> str:
@@ -306,10 +309,6 @@ async def extract_erp_for_session(
         # ERP 데이터 추출
         erp_data = None
         try:
-            # ERP Extractor가 None인지 확인
-            if erp_extractor is None:
-                raise HTTPException(status_code=500, detail="ERP Extractor가 초기화되지 않았습니다. 서버를 재시작해주세요.")
-            
             if segments:
                 # 세그먼트가 있으면 세그먼트에서 추출
                 logger.info("세그먼트에서 ERP 데이터 추출 중...")
@@ -333,17 +332,6 @@ async def extract_erp_for_session(
                 # 세그먼트가 없으면 전체 텍스트에서 추출
                 logger.info("전체 텍스트에서 ERP 데이터 추출 중...")
                 erp_dict = erp_extractor.extract_erp_data(transcript, filename=filename)
-            
-            # 요청사항 필드에 패턴 매칭 요약 추가
-            try:
-                from stt_handlers import _create_simple_summary
-                simple_summary = _create_simple_summary(transcript, erp_dict)
-                erp_dict["요청 사항"] = simple_summary
-                logger.info("패턴 매칭 기반 요약 생성 완료")
-            except Exception as e:
-                logger.warning(f"요약 생성 실패: {e}")
-                # 실패 시 기본 메시지 설정
-                erp_dict["요청 사항"] = "요약 생성 실패"
             
             erp_data = ERPData(**erp_dict)
             logger.info(f"ERP 데이터 추출 완료: {erp_dict}")

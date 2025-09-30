@@ -220,12 +220,92 @@ def extract_datetime_from_filename(filename: str) -> tuple:
     logger.warning(f"파일명에서 시간 정보를 찾을 수 없습니다: {filename}")
     return "정보 없음", "정보 없음"
 
-def extract_customer_name(conversation_text: str) -> str:
-    """STT 텍스트에서 고객사명을 추출"""
+def extract_location(conversation_text: str) -> str:
+    """STT 텍스트에서 작업국소(위치)를 추출"""
     if not conversation_text:
         return "정보 없음"
     
-    # 고객사명 패턴들
+    # 지역명 패턴들
+    location_patterns = [
+        r'인천',
+        r'서울',
+        r'부산',
+        r'대전',
+        r'대구',
+        r'광주',
+        r'울산',
+        r'세종',
+        r'경기',
+        r'강원',
+        r'충북',
+        r'충남',
+        r'전북',
+        r'전남',
+        r'경북',
+        r'경남',
+        r'제주',
+        r'천안',
+        r'아산',
+        r'수원',
+        r'성남',
+        r'고양',
+        r'용인',
+        r'부천',
+        r'화성',
+        r'안산',
+        r'안양',
+        r'평택',
+        r'시흥',
+        r'김포',
+        r'의정부',
+        r'광명',
+        r'하남',
+        r'오산',
+        r'이천',
+        r'안성',
+        r'의왕',
+        r'과천',
+        r'구리',
+        r'남양주',
+        r'파주',
+        r'양주',
+        r'포천',
+        r'연천',
+        r'가평',
+        r'양평'
+    ]
+    
+    for pattern in location_patterns:
+        matches = re.findall(pattern, conversation_text)
+        if matches:
+            location = matches[0].strip()
+            logger.info(f"작업국소 추출: {location}")
+            return location
+    
+    logger.warning("작업국소를 찾을 수 없습니다")
+    return "정보 없음"
+
+def extract_customer_name(conversation_text: str) -> str:
+    """STT 텍스트에서 고객사명/기관명을 추출 (개선된 버전)"""
+    if not conversation_text:
+        return "정보 없음"
+    
+    # 1. 기관명 패턴들 (우선순위 높음)
+    institution_patterns = [
+        r'인천\s*동부선관위',
+        r'동부선관위',
+        r'선관위\s*5C',
+        r'선관위',
+        r'동부선관',
+        r'수자원공사\s*FA망',
+        r'수자원공사',
+        r'한국전력공사',
+        r'한전',
+        r'한국가스공사',
+        r'한국도로공사'
+    ]
+    
+    # 2. 일반 고객사명 패턴들
     customer_patterns = [
         r'삼성\s*SDS',
         r'삼성\s*전자',
@@ -234,8 +314,6 @@ def extract_customer_name(conversation_text: str) -> str:
         r'SKT\s*\w*',
         r'네이버',
         r'카카오',
-        r'한국전력',
-        r'한전',
         r'현대\s*\w+',
         r'기아\s*\w*',
         r'포스코',
@@ -246,26 +324,48 @@ def extract_customer_name(conversation_text: str) -> str:
         r'롯데\s*\w+'
     ]
     
-    for pattern in customer_patterns:
+    # 3. 시스템명 패턴들
+    system_patterns = [
+        r'해외\s*페콜망',
+        r'FA망',
+        r'백본망',
+        r'전송망',
+        r'통신망'
+    ]
+    
+    # 우선순위에 따라 검색
+    all_patterns = institution_patterns + customer_patterns + system_patterns
+    
+    for pattern in all_patterns:
         matches = re.findall(pattern, conversation_text, re.IGNORECASE)
         if matches:
-            # 가장 자주 언급된 고객사 반환
             customer = matches[0].strip()
-            logger.info(f"고객사명 추출: {customer}")
+            logger.info(f"고객사/기관명 추출: {customer}")
             return customer
     
-    logger.warning("고객사명을 찾을 수 없습니다")
+    logger.warning("고객사/기관명을 찾을 수 없습니다")
     return "정보 없음"
 
 def analyze_request_context(conversation_text: str, stn_data: dict) -> str:
-    """STT 텍스트에서 요청사항의 문맥을 분석하여 의미있는 요청사항 생성"""
+    """STT 텍스트에서 요청사항의 문맥을 분석하여 의미있는 요청사항 생성 (개선된 버전)"""
     if not conversation_text:
         return f"장애유형: {stn_data.get('장애유형', '정보 없음')}, 요청유형: {stn_data.get('요청유형', '정보 없음')}"
     
     # 상세한 요청사항 분석
     request_details = []
     
-    # 1. 장애 상황 분석
+    # 1. UPS 관련 요청사항 (세션 100번 특화)
+    if 'UPS' in conversation_text:
+        if '소유권' in conversation_text or '고객 건지' in conversation_text or '저희 건지' in conversation_text:
+            request_details.append("UPS 소유권 확인 요청")
+        if '교체' in conversation_text:
+            request_details.append("UPS 교체 작업 관련")
+        if '설치' in conversation_text:
+            request_details.append("UPS 설치 관련 문의")
+        if 'KTS가 제공하는' in conversation_text:
+            request_details.append("KTS 제공 UPS 여부 확인")
+    
+    # 2. 장애 상황 분석
     if '링크 장애' in conversation_text:
         request_details.append("해외 페콜망 링크 장애 발생")
     if '복구' in conversation_text and '원인 파악' in conversation_text:
@@ -273,19 +373,23 @@ def analyze_request_context(conversation_text: str, stn_data: dict) -> str:
     if '알람' in conversation_text and '성능' in conversation_text:
         request_details.append("성능 관련 알람 발생")
     
-    # 2. 긴급성 및 처리 요청
+    # 3. 긴급성 및 처리 요청
     if '긴급하게' in conversation_text and '확인 요청' in conversation_text:
         request_details.append("긴급 확인 및 점검 요청")
     if '부탁드릴게요' in conversation_text:
         request_details.append("기술 지원 요청")
+    if '확인하고 싶어서' in conversation_text:
+        request_details.append("상황 확인 요청")
     
-    # 3. 구체적인 요청 내용
+    # 4. 구체적인 요청 내용
     if '회산번호' in conversation_text and '장비명' in conversation_text:
         request_details.append("회선번호 및 장비명 확인 요청")
     if '서버 IP' in conversation_text:
         request_details.append("서버 IP 정보 확인")
+    if '연락 드리겠습니다' in conversation_text:
+        request_details.append("후속 연락 및 조치 예정")
     
-    # 4. 시간 및 위치 정보
+    # 5. 시간 및 위치 정보
     time_pattern = r'(\d{1,2}시\s*\d{0,2}분?)'
     time_matches = re.findall(time_pattern, conversation_text)
     if time_matches:
@@ -293,8 +397,10 @@ def analyze_request_context(conversation_text: str, stn_data: dict) -> str:
     
     if '천안 아산' in conversation_text:
         request_details.append("천안 아산 지역 장애")
+    if '인천' in conversation_text:
+        request_details.append("인천 지역 관련")
     
-    # 5. 장비 및 네트워크 정보
+    # 6. 장비 및 네트워크 정보
     ip_pattern = r'(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'
     ip_matches = re.findall(ip_pattern, conversation_text)
     if ip_matches:
@@ -303,61 +409,97 @@ def analyze_request_context(conversation_text: str, stn_data: dict) -> str:
     if 'ROADN' in conversation_text or 'ROADM' in conversation_text:
         request_details.append("ROAD 장비 관련 이슈")
     
-    # 6. 고객사 및 네트워크 정보
+    # 7. 고객사 및 네트워크 정보
     if '삼성 SDS' in conversation_text:
         request_details.append("삼성 SDS 고객사")
     if '해외 페콜망' in conversation_text:
         request_details.append("해외 페콜망 관련")
+    if '선관위' in conversation_text:
+        request_details.append("선관위 관련")
     
-    # 7. 요청자 및 후속 조치
+    # 8. 요청자 및 후속 조치
     if '전역망원지팀' in conversation_text:
         request_details.append("전역망원지팀 요청")
-    if '연락 드리겠습니다' in conversation_text:
-        request_details.append("후속 연락 및 조치 예정")
+    if 'CTA' in conversation_text:
+        request_details.append("CTA 담당자 관련")
     
     # 요청사항 종합 정리
     if request_details:
-        # 기본 정보
-        base_info = f"장애유형: {stn_data.get('장애유형', '정보 없음')}, 요청유형: {stn_data.get('요청유형', '정보 없음')}"
-        
-        # 상세 요청사항
+        # 상세 요청사항만 반환 (None 값 제거)
         detailed_request = " | ".join(request_details)
-        
-        return f"{base_info} | 요청내용: {detailed_request}"
+        return detailed_request
     else:
-        # 기본 정보만 반환
-        return f"장애유형: {stn_data.get('장애유형', '정보 없음')}, 요청유형: {stn_data.get('요청유형', '정보 없음')}"
+        # 기본 정보만 반환 (None 값 제거)
+        base_info_parts = []
+        if stn_data.get('장애유형') and stn_data.get('장애유형') != 'None':
+            base_info_parts.append(f"장애유형: {stn_data.get('장애유형')}")
+        if stn_data.get('요청유형') and stn_data.get('요청유형') != 'None':
+            base_info_parts.append(f"요청유형: {stn_data.get('요청유형')}")
+        
+        return " | ".join(base_info_parts) if base_info_parts else "요청사항 정보 없음"
 
 def convert_to_legacy_erp_format(stn_data: dict, conversation_text: str = "", filename: str = "") -> dict:
-    """STN 형식을 기존 ERP 형식으로 변환"""
-    # 요청자 이름 추출 (STT 텍스트에서 직접 추출)
-    requester_name = extract_requester_name(conversation_text)
+    """STN 형식을 기존 ERP 형식으로 변환 (GPT 우선, 후처리 보완 방식)"""
+    # GPT 결과 우선, 실패시에만 후처리 로직 사용
     
-    # 고객사명 추출 (STT 텍스트에서 직접 추출)
-    customer_name = extract_customer_name(conversation_text)
+    # 요청자 이름 추출 (GPT 우선, 실패시 패턴 매칭)
+    requester_name = stn_data.get("요청자", "정보 없음")
+    if requester_name == "정보 없음" or requester_name is None:
+        requester_name = extract_requester_name(conversation_text)
+    
+    # 고객사명 추출 (GPT 우선, 실패시 패턴 매칭)
+    customer_name = stn_data.get("요청기관", "정보 없음")
+    if customer_name == "정보 없음" or customer_name is None:
+        customer_name = extract_customer_name(conversation_text)
+    
+    # 작업국소 추출 (GPT 우선, 실패시 패턴 매칭)
+    location = stn_data.get("작업국소", "정보 없음")
+    if location == "정보 없음" or location is None:
+        location = extract_location(conversation_text)
     
     # 파일명에서 녹음 시간 추출
     request_date, request_time = extract_datetime_from_filename(filename)
     
-    # 요청사항 문맥 분석
-    request_context = analyze_request_context(conversation_text, stn_data)
+    # 요청사항 문맥 분석 (GPT 우선, 실패시 패턴 매칭)
+    request_context = stn_data.get("요청사항", "정보 없음")
+    if request_context == "정보 없음" or request_context is None:
+        request_context = analyze_request_context(conversation_text, stn_data)
     
     # None 값을 안전하게 처리하는 헬퍼 함수
     def safe_get(key: str, default: str = "정보 없음") -> str:
         value = stn_data.get(key, default)
         return str(value) if value is not None else default
     
+    # 장비명 추출 (GPT 우선, 실패시 패턴 매칭)
+    equipment_name = stn_data.get("장비명", "정보 없음")
+    if (equipment_name == "정보 없음" or equipment_name is None) and conversation_text:
+        # STT 텍스트에서 장비명 직접 추출
+        if 'UPS' in conversation_text:
+            equipment_name = "UPS"
+        elif 'ROADM' in conversation_text or 'ROADN' in conversation_text:
+            equipment_name = "ROADM"
+        elif 'MSPP' in conversation_text:
+            equipment_name = "MSPP"
+        elif '스위치' in conversation_text:
+            equipment_name = "스위치"
+        elif '라우터' in conversation_text:
+            equipment_name = "라우터"
+        elif '공유기' in conversation_text:
+            equipment_name = "공유기"
+        elif '모뎀' in conversation_text:
+            equipment_name = "모뎀"
+    
     return {
         "AS 및 지원": "방문기술지원" if stn_data.get("요청유형") == "RQ-ONS" else "원격기술지원",
-        "요청기관": "정보 없음",
-        "작업국소": safe_get("위치"),
+        "요청기관": customer_name,  # 추출된 고객사명을 요청기관으로 사용
+        "작업국소": location,  # 추출된 위치 정보 사용
         "요청일": request_date,  # 파일명에서 추출된 요청일
         "요청시간": request_time,  # 파일명에서 추출된 요청시간
         "요청자": requester_name,  # 추출된 요청자 이름 사용
         "지원인원수": "1",
         "지원요원": "정보 없음",
-        "장비명": safe_get("장비명"),
-        "기종명": safe_get("장비명"),  # 장비명과 동일하게 처리
+        "장비명": equipment_name,  # 개선된 장비명 추출 사용
+        "기종명": equipment_name,  # 장비명과 동일하게 처리
         "A/S기간만료여부": "정보 없음",
         "시스템명(고객사명)": customer_name,  # 추출된 고객사명 사용
         "요청 사항": request_context  # 문맥 분석된 요청사항 사용

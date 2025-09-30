@@ -3,7 +3,8 @@
 세션 관리, 통계, 파일 관리, 시스템 상태 등 관리 기능
 """
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
+from fastapi.params import Path as FastAPIPath
 from typing import Optional, Dict, List
 import os
 import json
@@ -14,6 +15,11 @@ from pathlib import Path
 
 from supabase_client import get_supabase_manager
 from stt_handlers import whisper_model, cached_whisper_models, clear_model_cache, clear_whisper_file_cache
+from models import (
+    ExtractionsResponse, SessionsResponse, SessionDetailResponse, 
+    RegisterLogsResponse, StatisticsResponse, AudioFilesResponse,
+    ERPReExtractionResponse, AudioFileInfo, SystemStatistics
+)
 
 # 로깅 설정
 logger = logging.getLogger(__name__)
@@ -31,55 +37,63 @@ def get_supabase_manager_dep():
     return get_supabase_manager()
 
 
-@router.get("/sessions")
+@router.get("/sessions", response_model=SessionsResponse)
 async def get_stt_sessions(
-    limit: int = 50, 
-    offset: int = 0
-):
-    """STT 세션 목록 조회"""
-    try:
-        # 환경변수 강제 로드 (절대 경로 사용)
-        from dotenv import load_dotenv
-        config_path = os.path.join(os.getcwd(), 'config.env')
-        load_dotenv(config_path)
-        
-        # 환경변수 확인
-        supabase_url = os.getenv('SUPABASE_URL')
-        supabase_key = os.getenv('SUPABASE_ANON_KEY')
-        
-        if not supabase_url or not supabase_key:
-            return {
-                "status": "error",
-                "message": f"환경변수 로드 실패 - URL: {bool(supabase_url)}, KEY: {bool(supabase_key)}",
-                "sessions": [],
-                "total": 0
-            }
-        
-        # 직접 Supabase 매니저 생성
-        supabase_mgr = get_supabase_manager()
-        
-        sessions = supabase_mgr.get_stt_sessions(limit=limit, offset=offset)
-        return {
-            "status": "success",
-            "sessions": sessions,
-            "total": len(sessions)
-        }
-    except Exception as e:
-        logger.error(f"세션 목록 조회 실패: {e}")
-        return {
-            "status": "error",
-            "message": f"데이터베이스 연결 실패: {str(e)}",
-            "sessions": [],
-            "total": 0
-        }
-
-
-@router.get("/sessions/{session_id}")
-async def get_stt_session(
-    session_id: int,
+    limit: int = Query(50, description="조회할 세션 개수", ge=1, le=1000),
+    offset: int = Query(0, description="시작 위치 (페이징)", ge=0),
     supabase_mgr=Depends(get_supabase_manager_dep)
 ):
-    """특정 STT 세션 상세 조회"""
+    """
+    STT 세션 목록 조회
+    
+    처리된 STT 세션들의 목록을 조회합니다. 페이징을 지원하여 대량의 데이터를 효율적으로 처리할 수 있습니다.
+    
+    - **limit**: 한 번에 조회할 세션 개수 (1-1000)
+    - **offset**: 시작 위치 (0부터 시작)
+    
+    Returns:
+        STT 세션 목록과 전체 개수
+    """
+    try:
+        if supabase_mgr:
+            sessions = supabase_mgr.get_stt_sessions(limit=limit, offset=offset)
+            return SessionsResponse(
+                status="success",
+                sessions=sessions,
+                total=len(sessions)
+            )
+        else:
+            return SessionsResponse(
+                status="error",
+                message="Supabase 연결이 없습니다",
+                sessions=[],
+                total=0
+            )
+    except Exception as e:
+        logger.error(f"세션 목록 조회 실패: {e}")
+        return SessionsResponse(
+            status="error",
+            message=f"데이터베이스 연결 실패: {str(e)}",
+            sessions=[],
+            total=0
+        )
+
+
+@router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
+async def get_stt_session(
+    session_id: int = FastAPIPath(..., description="조회할 세션 ID", ge=1),
+    supabase_mgr=Depends(get_supabase_manager_dep)
+):
+    """
+    특정 STT 세션 상세 조회
+    
+    지정된 세션 ID의 STT 세션 정보와 연결된 ERP 추출 결과를 함께 조회합니다.
+    
+    - **session_id**: 조회할 세션의 고유 ID (1 이상)
+    
+    Returns:
+        STT 세션 상세 정보와 연결된 ERP 추출 결과
+    """
     try:
         session = supabase_mgr.get_stt_session(session_id)
         if not session:
@@ -88,11 +102,11 @@ async def get_stt_session(
         # ERP 추출 결과도 함께 조회
         extraction = supabase_mgr.get_erp_extraction(session_id)
         
-        return {
-            "status": "success",
-            "session": session,
-            "extraction": extraction
-        }
+        return SessionDetailResponse(
+            status="success",
+            session=session,
+            extraction=extraction
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -100,37 +114,57 @@ async def get_stt_session(
         raise HTTPException(status_code=500, detail=f"세션 조회 중 오류가 발생했습니다: {str(e)}")
 
 
-@router.get("/extractions")
+@router.get("/extractions", response_model=ExtractionsResponse)
 async def get_erp_extractions(
-    limit: int = 50, 
-    offset: int = 0,
+    limit: int = Query(50, description="조회할 추출 결과 개수", ge=1, le=1000),
+    offset: int = Query(0, description="시작 위치 (페이징)", ge=0),
     supabase_mgr=Depends(get_supabase_manager_dep)
 ):
-    """ERP 추출 결과 목록 조회"""
+    """
+    ERP 추출 결과 목록 조회
+    
+    STT 처리 후 추출된 ERP 데이터들의 목록을 조회합니다. 페이징을 지원하여 대량의 데이터를 효율적으로 처리할 수 있습니다.
+    
+    - **limit**: 한 번에 조회할 추출 결과 개수 (1-1000)
+    - **offset**: 시작 위치 (0부터 시작)
+    
+    Returns:
+        ERP 추출 결과 목록과 전체 개수
+    """
     try:
         extractions = supabase_mgr.get_erp_extractions(limit=limit, offset=offset)
-        return {
-            "status": "success",
-            "extractions": extractions,
-            "total": len(extractions)
-        }
+        return ExtractionsResponse(
+            status="success",
+            extractions=extractions,
+            total=len(extractions)
+        )
     except Exception as e:
         logger.error(f"ERP 추출 결과 조회 실패: {e}")
-        return {
-            "status": "error",
-            "message": f"데이터베이스 연결 실패: {str(e)}",
-            "extractions": [],
-            "total": 0
-        }
+        return ExtractionsResponse(
+            status="error",
+            message=f"데이터베이스 연결 실패: {str(e)}",
+            extractions=[],
+            total=0
+        )
 
 
-@router.get("/statistics")
+@router.get("/statistics", response_model=StatisticsResponse)
 async def get_system_statistics(
-    date_filter: Optional[str] = None,
-    month_filter: Optional[str] = None,
+    date_filter: Optional[str] = Query(None, description="날짜 필터 (YYYY-MM-DD 형식)", regex=r"^\d{4}-\d{2}-\d{2}$"),
+    month_filter: Optional[str] = Query(None, description="월 필터 (YYYY-MM 형식)", regex=r"^\d{4}-\d{2}$"),
     supabase_mgr=Depends(get_supabase_manager_dep)
 ):
-    """시스템 통계 조회"""
+    """
+    시스템 통계 조회
+    
+    STT 세션, ERP 추출, 등록 현황 등의 시스템 통계를 조회합니다. 날짜별 또는 월별 필터링을 지원합니다.
+    
+    - **date_filter**: 특정 날짜의 통계 조회 (YYYY-MM-DD 형식)
+    - **month_filter**: 특정 월의 통계 조회 (YYYY-MM 형식)
+    
+    Returns:
+        시스템 통계 정보 (세션 수, 추출 수, 등록 현황, 평균 처리 시간 등)
+    """
     try:
         stats = {
             "total_sessions": 0,
@@ -158,27 +192,42 @@ async def get_system_statistics(
             
             stats = supabase_mgr.get_statistics(**filter_params)
         
-        return {
-            "status": "success",
-            "statistics": stats,
-            "timestamp": datetime.now().isoformat()
-        }
+        return StatisticsResponse(
+            status="success",
+            statistics=stats
+        )
         
     except Exception as e:
         logger.error(f"통계 조회 실패: {e}")
-        return {
-            "status": "error",
-            "message": f"통계 조회 실패: {str(e)}",
-            "statistics": {}
-        }
+        return StatisticsResponse(
+            status="error",
+            message=f"통계 조회 실패: {str(e)}",
+            statistics=SystemStatistics(
+                total_sessions=0,
+                completed_sessions=0,
+                failed_sessions=0,
+                total_extractions=0,
+                total_registers=0,
+                success_registers=0,
+                failed_registers=0,
+                avg_processing_time=0.0,
+                model_usage={}
+            )
+        )
 
 
-@router.get("/audio-files")
+@router.get("/audio-files", response_model=AudioFilesResponse)
 async def get_audio_files():
     """
-    src_record 디렉토리에서 사용 가능한 음성 파일 목록을 조회
-    - 기존 src_record 직접 하위 파일들
-    - 일자별 폴더(YYYY-MM-DD) 내의 파일들
+    음성 파일 목록 조회
+    
+    src_record 디렉토리에서 사용 가능한 음성 파일들의 목록을 조회합니다.
+    직접 하위 파일들과 일자별 폴더(YYYY-MM-DD) 내의 파일들을 모두 포함합니다.
+    
+    지원하는 파일 형식: MP3, WAV, M4A, FLAC
+    
+    Returns:
+        음성 파일 목록 (전체 파일과 일자별 파일 분류)
     """
     try:
         audio_files = []  # 루트 디렉토리 파일들
@@ -205,7 +254,9 @@ async def get_audio_files():
                             "path": file,
                             "size": os.path.getsize(file_path),
                             "modified": datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
-                            "type": "direct"
+                            "type": "direct",
+                            "extension": file_ext,
+                            "location": "direct"
                         }
                         audio_files.append(file_info)
         except Exception as e:
@@ -233,7 +284,9 @@ async def get_audio_files():
                                         "size": os.path.getsize(file_path),
                                         "modified": datetime.fromtimestamp(os.path.getmtime(file_path)).isoformat(),
                                         "type": "daily_folder",
-                                        "folder": item
+                                        "folder": item,
+                                        "extension": file_ext,
+                                        "location": "daily"
                                     }
                                     daily_files[item].append(file_info)
                     except ValueError:
@@ -250,47 +303,68 @@ async def get_audio_files():
         # 전체 파일 수 계산
         total_files = len(audio_files) + sum(len(files) for files in daily_files.values())
         
-        return {
-            "status": "success",
-            "files": audio_files,  # 루트 파일들
-            "daily_files": daily_files,  # 일자별 폴더 파일들
-            "total": total_files,
-            "directory": AUDIO_DIRECTORY,
-            "supported_extensions": SUPPORTED_AUDIO_EXTENSIONS
-        }
+        return AudioFilesResponse(
+            status="success",
+            message=f"총 {total_files}개의 음성 파일을 찾았습니다",
+            files=audio_files,  # 루트 파일들
+            daily_files=daily_files,  # 일자별 폴더 파일들
+            directory=AUDIO_DIRECTORY,
+            today_folder=datetime.now().strftime("%Y-%m-%d")
+        )
         
     except Exception as e:
         logger.error(f"음성 파일 목록 조회 실패: {e}")
-        return {
-            "status": "error",
-            "message": f"음성 파일 목록 조회 실패: {str(e)}",
-            "files": [],
-            "total": 0
-        }
+        return AudioFilesResponse(
+            status="error",
+            message=f"음성 파일 목록 조회 실패: {str(e)}",
+            files=[],
+            daily_files={},
+            directory=AUDIO_DIRECTORY,
+            today_folder=datetime.now().strftime("%Y-%m-%d")
+        )
 
 
-@router.get("/register-logs")
+@router.get("/register-logs", response_model=RegisterLogsResponse)
 async def get_register_logs(
-    limit: int = 50, 
-    offset: int = 0,
+    limit: int = Query(50, description="조회할 등록 로그 개수", ge=1, le=1000),
+    offset: int = Query(0, description="시작 위치 (페이징)", ge=0),
     supabase_mgr=Depends(get_supabase_manager_dep)
 ):
-    """ERP 등록 로그 조회"""
+    """
+    ERP 등록 로그 조회
+    
+    ERP 시스템으로 등록을 시도한 로그들의 목록을 조회합니다. 
+    등록 성공/실패 상태와 ERP 시스템 응답 데이터를 포함합니다.
+    
+    - **limit**: 한 번에 조회할 등록 로그 개수 (1-1000)
+    - **offset**: 시작 위치 (0부터 시작)
+    
+    Returns:
+        ERP 등록 로그 목록과 전체 개수
+    """
     try:
-        logs = supabase_mgr.get_erp_register_logs(limit=limit, offset=offset)
-        return {
-            "status": "success",
-            "register_logs": logs,  # Admin UI가 기대하는 필드명으로 변경
-            "total": len(logs)
-        }
+        if supabase_mgr:
+            logs = supabase_mgr.get_erp_register_logs(limit=limit, offset=offset)
+            return RegisterLogsResponse(
+                status="success",
+                register_logs=logs,
+                total=len(logs)
+            )
+        else:
+            return RegisterLogsResponse(
+                status="error",
+                message="Supabase 연결이 없습니다",
+                register_logs=[],
+                total=0
+            )
     except Exception as e:
         logger.error(f"등록 로그 조회 실패: {e}")
-        return {
-            "status": "error",
-            "message": f"등록 로그 조회 실패: {str(e)}",
-            "register_logs": [],  # Admin UI가 기대하는 필드명으로 변경
-            "total": 0
-        }
+        return RegisterLogsResponse(
+            status="error",
+            message=f"등록 로그 조회 실패: {str(e)}",
+            register_logs=[],
+            total=0
+        )
 
 
 @router.get("/directory-summary")

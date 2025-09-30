@@ -33,26 +33,8 @@ import {
   Close as CloseIcon,
 } from '@mui/icons-material';
 import { apiService } from '../../services/api';
+import { ERPExtraction } from '../../types/api';
 
-interface ERPExtraction {
-  id: number;
-  session_id: number;
-  as_지원?: string;
-  요청기관?: string;
-  작업국소?: string;
-  요청일?: string;
-  요청시간?: string;
-  요청자?: string;
-  지원인원수?: string;
-  지원요원?: string;
-  장비명?: string;
-  기종명?: string;
-  as_기간만료여부?: string;
-  시스템명?: string;
-  요청사항?: string;
-  confidence_score?: number;
-  created_at?: string;
-}
 
 interface RegisterLog {
   id: number;
@@ -186,19 +168,19 @@ const ResultsPage: React.FC = () => {
       setRegistering(extraction.id);
       
       const erpData = {
-        "AS 및 지원": extraction.as_지원 || '',
-        "요청기관": extraction.요청기관 || '',
-        "작업국소": extraction.작업국소 || '',
-        "요청일": extraction.요청일 || '',
-        "요청시간": extraction.요청시간 || '',
-        "요청자": extraction.요청자 || '',
-        "지원인원수": extraction.지원인원수 || '',
-        "지원요원": extraction.지원요원 || '',
-        "장비명": extraction.장비명 || '',
-        "기종명": extraction.기종명 || '',
-        "A/S기간만료여부": extraction.as_기간만료여부 || '',
-        "시스템명(고객사명)": extraction.시스템명 || '',
-        "요청 사항": extraction.요청사항 || ''
+        "AS 및 지원": extraction["AS 및 지원"] || '',
+        "요청기관": extraction["요청기관"] || '',
+        "작업국소": extraction["작업국소"] || '',
+        "요청일": extraction["요청일"] || '',
+        "요청시간": extraction["요청시간"] || '',
+        "요청자": extraction["요청자"] || '',
+        "지원인원수": extraction["지원인원수"] || '',
+        "지원요원": extraction["지원요원"] || '',
+        "장비명": extraction["장비명"] || '',
+        "기종명": extraction["기종명"] || '',
+        "A/S기간만료여부": extraction["A/S기간만료여부"] || '',
+        "시스템명(고객사명)": extraction["시스템명(고객사명)"] || '',
+        "요청 사항": extraction["요청 사항"] || ''
       };
 
       const response = await apiService.registerERP(erpData, extraction.id);
@@ -497,23 +479,23 @@ const ResultsPage: React.FC = () => {
                   <Typography><strong>처리 파일:</strong> {fileName}</Typography>
                   <Typography><strong>일자 폴더:</strong> {dateFolder}</Typography>
                   <Divider sx={{ my: 1 }} />
-                  <Typography><strong>AS 및 지원:</strong> {extraction.as_지원 || 'N/A'}</Typography>
-                  <Typography><strong>요청기관:</strong> {extraction.요청기관 || 'N/A'}</Typography>
-                  <Typography><strong>작업국소:</strong> {extraction.작업국소 || 'N/A'}</Typography>
-                  <Typography><strong>요청일:</strong> {extraction.요청일 || 'N/A'}</Typography>
-                  <Typography><strong>요청시간:</strong> {extraction.요청시간 || 'N/A'}</Typography>
-                  <Typography><strong>요청자:</strong> {extraction.요청자 || 'N/A'}</Typography>
-                  <Typography><strong>지원인원수:</strong> {extraction.지원인원수 || 'N/A'}</Typography>
+                  <Typography><strong>AS 및 지원:</strong> {extraction["AS 및 지원"] || 'N/A'}</Typography>
+                  <Typography><strong>요청기관:</strong> {extraction["요청기관"] || 'N/A'}</Typography>
+                  <Typography><strong>작업국소:</strong> {extraction["작업국소"] || 'N/A'}</Typography>
+                  <Typography><strong>요청일:</strong> {extraction["요청일"] || 'N/A'}</Typography>
+                  <Typography><strong>요청시간:</strong> {extraction["요청시간"] || 'N/A'}</Typography>
+                  <Typography><strong>요청자:</strong> {extraction["요청자"] || 'N/A'}</Typography>
+                  <Typography><strong>지원인원수:</strong> {extraction["지원인원수"] || 'N/A'}</Typography>
                 </Box>
                 
                 <Box flex={1}>
                   <Box sx={{ '& > div': { mb: 1 } }}>
-                    <Typography><strong>지원요원:</strong> {extraction.지원요원 || 'N/A'}</Typography>
-                    <Typography><strong>장비명:</strong> {extraction.장비명 || 'N/A'}</Typography>
-                    <Typography><strong>기종명:</strong> {extraction.기종명 || 'N/A'}</Typography>
-                    <Typography><strong>A/S기간만료여부:</strong> {extraction.as_기간만료여부 || 'N/A'}</Typography>
-                    <Typography><strong>시스템명(고객사명):</strong> {extraction.시스템명 || 'N/A'}</Typography>
-                    <Typography><strong>요청 사항:</strong> {extraction.요청사항 || 'N/A'}</Typography>
+                    <Typography><strong>지원요원:</strong> {extraction["지원요원"] || 'N/A'}</Typography>
+                    <Typography><strong>장비명:</strong> {extraction["장비명"] || 'N/A'}</Typography>
+                    <Typography><strong>기종명:</strong> {extraction["기종명"] || 'N/A'}</Typography>
+                    <Typography><strong>A/S기간만료여부:</strong> {extraction["A/S기간만료여부"] || 'N/A'}</Typography>
+                    <Typography><strong>시스템명(고객사명):</strong> {extraction['시스템명(고객사명)'] || 'N/A'}</Typography>
+                    <Typography><strong>요청 사항:</strong> {extraction['요청 사항'] || 'N/A'}</Typography>
                     <Typography><strong>신뢰도:</strong> {extraction.confidence_score || 'N/A'}</Typography>
                     <Typography><strong>생성일:</strong> {extraction.created_at ? new Date(extraction.created_at).toLocaleString() : 'N/A'}</Typography>
                   </Box>

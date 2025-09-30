@@ -246,7 +246,18 @@ async def startup_event():
     except Exception as e:
         logger.error(f"❌ STT 모델 초기화 실패: {e}")
     
-    # 2. 스케줄러 시작
+    # 2. ERP 추출기 초기화
+    try:
+        from gpt_extractor import ERPExtractor
+        from erp_handlers import erp_extractor as global_erp_extractor
+        
+        # 전역 ERP 추출기 초기화
+        global_erp_extractor = ERPExtractor()
+        logger.info("✅ ERP 추출기 초기화 완료")
+    except Exception as e:
+        logger.error(f"❌ ERP 추출기 초기화 실패: {e}")
+    
+    # 3. 스케줄러 시작
     if scheduler and not scheduler.running:
         try:
             # 매일 자정에 일일 폴더 생성 작업 스케줄

@@ -104,7 +104,25 @@ class SupabaseManager:
             result = self.client.table('stt_sessions').select('*').eq('id', session_id).execute()
             
             if result.data:
-                return result.data[0]
+                session = result.data[0]
+                
+                # segments 필드가 JSON 문자열인 경우 파싱
+                if session.get('segments') and isinstance(session['segments'], str):
+                    try:
+                        import json
+                        session['segments'] = json.loads(session['segments'])
+                    except (json.JSONDecodeError, TypeError):
+                        session['segments'] = []
+                
+                # original_segments 필드가 JSON 문자열인 경우 파싱
+                if session.get('original_segments') and isinstance(session['original_segments'], str):
+                    try:
+                        import json
+                        session['original_segments'] = json.loads(session['original_segments'])
+                    except (json.JSONDecodeError, TypeError):
+                        session['original_segments'] = []
+                
+                return session
             else:
                 return None
                 
@@ -121,7 +139,26 @@ class SupabaseManager:
                 .range(offset, offset + limit - 1)\
                 .execute()
             
-            return result.data or []
+            # JSON 문자열 필드들을 파싱
+            sessions = result.data or []
+            for session in sessions:
+                # segments 필드가 JSON 문자열인 경우 파싱
+                if session.get('segments') and isinstance(session['segments'], str):
+                    try:
+                        import json
+                        session['segments'] = json.loads(session['segments'])
+                    except (json.JSONDecodeError, TypeError):
+                        session['segments'] = []
+                
+                # original_segments 필드가 JSON 문자열인 경우 파싱
+                if session.get('original_segments') and isinstance(session['original_segments'], str):
+                    try:
+                        import json
+                        session['original_segments'] = json.loads(session['original_segments'])
+                    except (json.JSONDecodeError, TypeError):
+                        session['original_segments'] = []
+            
+            return sessions
             
         except Exception as e:
             logger.error(f"STT 세션 목록 조회 실패: {e}")
@@ -258,7 +295,18 @@ class SupabaseManager:
                 .range(offset, offset + limit - 1)\
                 .execute()
             
-            return result.data or []
+            # 필드명 변환 (데이터베이스 필드명 → API 응답 필드명)
+            extractions = result.data or []
+            for extraction in extractions:
+                # 요청사항 → 요청 사항
+                if '요청사항' in extraction:
+                    extraction['요청 사항'] = extraction.pop('요청사항')
+                
+                # 시스템명 → 시스템명(고객사명) (이미 올바른 필드명인 경우는 그대로)
+                if '시스템명' in extraction and '시스템명(고객사명)' not in extraction:
+                    extraction['시스템명(고객사명)'] = extraction.pop('시스템명')
+            
+            return extractions
             
         except Exception as e:
             logger.error(f"ERP 추출 결과 목록 조회 실패: {e}")
@@ -300,13 +348,17 @@ class SupabaseManager:
                 .execute()
             
             if result.data:
-                # JSON 응답 데이터 파싱
+                # JSON 응답 데이터 파싱 및 호환성 필드 추가
                 for log in result.data:
                     if log.get('response_data') and isinstance(log['response_data'], str):
                         try:
                             log['response_data'] = json.loads(log['response_data'])
                         except json.JSONDecodeError:
                             pass
+                    
+                    # 호환성을 위해 created_at 필드 추가 (registered_at과 동일한 값)
+                    if 'registered_at' in log and 'created_at' not in log:
+                        log['created_at'] = log['registered_at']
                 
                 logger.info(f"ERP 등록 로그 {len(result.data)}건 조회 완료")
                 return result.data
@@ -363,8 +415,9 @@ class SupabaseManager:
                 stt_query = stt_query.gte('created_at', date_conditions['start']).lt('created_at', date_conditions['end'])
             stt_result = stt_query.execute()
             
-            # 완료된 세션 수 계산
+            # 완료된 세션 수 및 실패한 세션 수 계산
             completed_sessions = 0
+            failed_sessions = 0
             total_processing_time = 0
             processing_count = 0
             
@@ -375,6 +428,8 @@ class SupabaseManager:
                         if session.get('processing_time'):
                             total_processing_time += session['processing_time']
                             processing_count += 1
+                    elif session.get('status') == 'failed':
+                        failed_sessions += 1
             
             # 평균 처리 시간 계산
             avg_processing_time = total_processing_time / processing_count if processing_count > 0 else 0
@@ -391,10 +446,15 @@ class SupabaseManager:
                 register_query = register_query.gte('registered_at', date_conditions['start']).lt('registered_at', date_conditions['end'])
             register_result = register_query.execute()
             
-            # 성공한 등록 수 계산
+            # 성공한 등록 수 및 실패한 등록 수 계산
             success_registers = 0
+            failed_registers = 0
             if register_result.data:
-                success_registers = sum(1 for log in register_result.data if log.get('status') == 'success')
+                for log in register_result.data:
+                    if log.get('status') == 'success':
+                        success_registers += 1
+                    elif log.get('status') == 'failed':
+                        failed_registers += 1
             
             # 최근 7일 통계 (날짜 필터와 별개로 항상 계산)
             seven_days_ago = (datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) 
@@ -408,10 +468,13 @@ class SupabaseManager:
             return {
                 "total_sessions": stt_result.count or 0,
                 "completed_sessions": completed_sessions,
+                "failed_sessions": failed_sessions,
                 "total_extractions": erp_result.count or 0,
                 "total_registers": register_result.count or 0,
                 "success_registers": success_registers,
+                "failed_registers": failed_registers,
                 "avg_processing_time": avg_processing_time,
+                "model_usage": {},  # 모델별 사용 통계 (추후 구현)
                 "recent_sessions_7days": recent_sessions.count or 0,
                 "filter_applied": filter_info,
                 "date_filter": date_filter,
@@ -424,10 +487,13 @@ class SupabaseManager:
             return {
                 "total_sessions": 0,
                 "completed_sessions": 0,
+                "failed_sessions": 0,
                 "total_extractions": 0,
                 "total_registers": 0,
                 "success_registers": 0,
+                "failed_registers": 0,
                 "avg_processing_time": 0,
+                "model_usage": {},
                 "recent_sessions_7days": 0,
                 "filter_applied": "오류",
                 "date_filter": date_filter,

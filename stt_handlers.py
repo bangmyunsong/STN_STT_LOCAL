@@ -311,17 +311,18 @@ async def process_audio_file(
             # 모델 캐싱으로 성능 최적화
             current_model = get_whisper_model(model_name)
             
-            # STT 실행
+            # STT 실행 (속도 최적화)
             result = current_model.transcribe(
                 temp_file_path, 
                 language=language,
                 beam_size=1,
-                verbose=True,
+                verbose=False,  # 로그 출력 비활성화로 속도 향상
                 no_speech_threshold=0.6,  # 음성 없는 구간 감지 임계값 (속도 향상)
                 logprob_threshold=-1.0,   # 로그 확률 임계값 (품질 향상)
                 compression_ratio_threshold=2.4,  # 압축 비율 임계값 (효율성 향상)
-                condition_on_previous_text=True,  # 이전 텍스트 조건화 (정확도 향상)
-                word_timestamps=False  # 단어별 타임스탬프 비활성화 (속도 최적화)
+                condition_on_previous_text=False,  # 이전 텍스트 조건화 비활성화 (속도 향상)
+                word_timestamps=False,  # 단어별 타임스탬프 비활성화 (속도 최적화)
+                fp16=True  # FP16 사용으로 속도 향상
             )
             
             # 세그먼트 데이터 처리 (단순화: 원본 + 후처리)
