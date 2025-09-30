@@ -188,23 +188,14 @@ const FileStatusPage: React.FC = () => {
 
   const handleFileSubmit = async () => {
     if (!selectedFile) return;
-  
+
     try {
       setUploading(true);
       
-      // 디버깅: 현재 선택된 날짜 확인
-      const currentDate = getCurrentSelectedDate();
-      console.log('업로드 시 선택된 날짜:', currentDate);
-      console.log('selectedMonth:', selectedMonth);
-      console.log('selectedDay:', selectedDay);
-      
       // 파일 업로드 API 호출
-      const targetDate = currentDate !== '전체' ? currentDate : undefined;
-      console.log('API에 전달할 targetDate:', targetDate);
+      const result = await apiService.uploadFile(selectedFile, getCurrentSelectedDate() !== '전체' ? getCurrentSelectedDate() : undefined);
       
-      const result = await apiService.uploadFile(selectedFile, targetDate);
-      
-      showSnackbar(`파일 업로드 완료: ${selectedFile.name} (${targetDate || '오늘'})`, 'success');
+      showSnackbar(`파일 업로드 완료: ${selectedFile.name}`, 'success');
       setSelectedFile(null);
       
       // 파일 목록 새로고침

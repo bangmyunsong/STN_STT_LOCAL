@@ -3,7 +3,7 @@
 세션 관리, 통계, 파일 관리, 시스템 상태 등 관리 기능
 """
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Query, Form
 from fastapi.params import Path as FastAPIPath
 from typing import Optional, Dict, List
 import os
@@ -767,10 +767,11 @@ async def reload_base_model():
 @router.post("/upload-file")
 async def upload_file(
     file: UploadFile = File(..., description="업로드할 음성 파일"),
-    target_date: Optional[str] = None
+    target_date: Optional[str] = Form(None, description="대상 날짜 (YYYY-MM-DD 형식)")
 ):
     """음성 파일을 특정 날짜 폴더에 업로드"""
     try:
+        logger.info(f"업로드 요청 - 파일: {file.filename}, target_date: {target_date}")
         # 파일 확장자 검증
         file_extension = os.path.splitext(file.filename)[1].lower()
         if file_extension not in SUPPORTED_AUDIO_EXTENSIONS:
