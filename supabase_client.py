@@ -309,8 +309,29 @@ class SupabaseManager:
             return extractions
             
         except Exception as e:
-            logger.error(f"ERP 추출 결과 목록 조회 실패: {e}")
-            return []
+            # PostgREST 스키마 캐시에 관계가 없어 발생하는 오류(PGRST200) 대비
+            msg = str(e)
+            if 'PGRST200' in msg or 'relationship' in msg:
+                try:
+                    logger.warning("관계 미인식으로 임베디드 조인을 생략하고 조회합니다 (fallback)")
+                    result = self.client.table('erp_extractions')\
+                        .select('*')\
+                        .order('created_at', desc=True)\
+                        .range(offset, offset + limit - 1)\
+                        .execute()
+                    extractions = result.data or []
+                    for extraction in extractions:
+                        if '요청사항' in extraction:
+                            extraction['요청 사항'] = extraction.pop('요청사항')
+                        if '시스템명' in extraction and '시스템명(고객사명)' not in extraction:
+                            extraction['시스템명(고객사명)'] = extraction.pop('시스템명')
+                    return extractions
+                except Exception as e2:
+                    logger.error(f"ERP 추출 결과 목록 조회 실패 (fallback도 실패): {e2}")
+                    return []
+            else:
+                logger.error(f"ERP 추출 결과 목록 조회 실패: {e}")
+                return []
     
     # ERP 등록 로그 관련 메소드들
     
@@ -716,7 +737,7 @@ def save_erp_result(session_id: int, erp_data: Dict[str, str]) -> int:
 
 # 데이터베이스 스키마 생성 SQL (참고용)
 DATABASE_SCHEMA = """
--- STT 처리 세션 테이블
+-- STT 처리 세션 테이블 (실제 Supabase 스키마 기준)
 CREATE TABLE IF NOT EXISTS stt_sessions (
     id SERIAL PRIMARY KEY,
     file_id VARCHAR(100) UNIQUE NOT NULL,
@@ -725,20 +746,22 @@ CREATE TABLE IF NOT EXISTS stt_sessions (
     language VARCHAR(10),
     transcript TEXT,
     segments JSONB,
+    original_transcript TEXT,
+    original_segments JSONB,
     processing_time FLOAT,
     status VARCHAR(20) DEFAULT 'processing',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ERP 추출 결과 테이블
+-- ERP 추출 결과 테이블 (실제 Supabase 스키마 기준)
 CREATE TABLE IF NOT EXISTS erp_extractions (
     id SERIAL PRIMARY KEY,
     session_id INTEGER REFERENCES stt_sessions(id) ON DELETE CASCADE,
     as_지원 VARCHAR(50),
     요청기관 VARCHAR(200),
     작업국소 VARCHAR(100),
-    요청일 DATE,
+    요청일 VARCHAR(20),  -- DATE에서 VARCHAR로 변경 (YYYY-MM-DD 문자열 저장)
     요청시간 TEXT,
     요청자 VARCHAR(100),
     지원인원수 VARCHAR(20),
@@ -753,7 +776,7 @@ CREATE TABLE IF NOT EXISTS erp_extractions (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- ERP 등록 로그 테이블
+-- ERP 등록 로그 테이블 (실제 Supabase 스키마 기준)
 CREATE TABLE IF NOT EXISTS erp_register_logs (
     id SERIAL PRIMARY KEY,
     extraction_id INTEGER REFERENCES erp_extractions(id) ON DELETE CASCADE,
@@ -763,24 +786,30 @@ CREATE TABLE IF NOT EXISTS erp_register_logs (
     registered_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 인덱스 생성
+-- 인덱스 생성 (실제 Supabase 스키마 기준)
 CREATE INDEX IF NOT EXISTS idx_stt_sessions_file_id ON stt_sessions(file_id);
 CREATE INDEX IF NOT EXISTS idx_stt_sessions_created_at ON stt_sessions(created_at);
 CREATE INDEX IF NOT EXISTS idx_stt_sessions_file_name ON stt_sessions(file_name);
 CREATE INDEX IF NOT EXISTS idx_stt_sessions_file_name_pattern ON stt_sessions USING btree (file_name text_pattern_ops);
+CREATE INDEX IF NOT EXISTS idx_stt_sessions_status ON stt_sessions(status);
 CREATE INDEX IF NOT EXISTS idx_erp_extractions_session_id ON erp_extractions(session_id);
 CREATE INDEX IF NOT EXISTS idx_erp_extractions_created_at ON erp_extractions(created_at);
+CREATE INDEX IF NOT EXISTS idx_erp_extractions_요청기관 ON erp_extractions(요청기관);
+CREATE INDEX IF NOT EXISTS idx_erp_extractions_작업국소 ON erp_extractions(작업국소);
 CREATE INDEX IF NOT EXISTS idx_erp_register_logs_extraction_id ON erp_register_logs(extraction_id);
 CREATE INDEX IF NOT EXISTS idx_erp_register_logs_status ON erp_register_logs(status);
+CREATE INDEX IF NOT EXISTS idx_erp_register_logs_registered_at ON erp_register_logs(registered_at);
 
--- 디렉토리 구조를 고려한 음성파일 처리 상태 뷰
+-- 디렉토리 구조를 고려한 음성파일 처리 상태 뷰 (실제 Supabase 스키마 기준)
 CREATE OR REPLACE VIEW audio_file_processing_status AS
 SELECT 
     -- 파일 정보 (디렉토리 구조 고려)
     s.file_name as 전체파일경로,
     CASE 
+        WHEN s.file_name LIKE 'src_record/%/%' 
+        THEN SPLIT_PART(s.file_name, '/', 2)  -- src_record/2025-07-16/파일명 -> 2025-07-16
         WHEN s.file_name LIKE '%/%' 
-        THEN SPLIT_PART(s.file_name, '/', 1)
+        THEN SPLIT_PART(s.file_name, '/', 1)  -- 기타 폴더/파일명 -> 폴더
         ELSE '루트'
     END as 디렉토리,
     CASE 
@@ -789,17 +818,32 @@ SELECT
         ELSE s.file_name
     END as 파일명,
     
-    -- 기존 정보
+    -- STT 세션 정보
     s.id as session_id,
     s.file_id,
     s.model_name as stt_모델,
     s.status as stt_상태,
     s.processing_time as stt_처리시간,
+    s.transcript as stt_전사결과,
+    s.original_transcript as stt_원본전사,
     
     -- ERP 추출 상태
     CASE WHEN e.id IS NOT NULL THEN 'Y' ELSE 'N' END as erp_추출여부,
     e.id as extraction_id,
     e.confidence_score as erp_신뢰도,
+    e.as_지원,
+    e.요청기관,
+    e.작업국소,
+    e.요청일,
+    e.요청시간,
+    e.요청자,
+    e.지원인원수,
+    e.지원요원,
+    e.장비명,
+    e.기종명,
+    e.as_기간만료여부,
+    e.시스템명,
+    e.요청사항,
     
     -- ERP 등록 상태  
     CASE WHEN r.id IS NOT NULL AND r.status = 'success' THEN 'Y' ELSE 'N' END as erp_등록여부,
@@ -812,6 +856,7 @@ SELECT
         WHEN e.id IS NOT NULL THEN '추출완료'
         WHEN s.status = 'completed' THEN 'STT완료'
         WHEN s.status = 'processing' THEN '처리중'
+        WHEN s.status = 'failed' THEN '실패'
         ELSE '미처리'
     END as 전체_처리상태,
     
@@ -820,6 +865,7 @@ SELECT
         WHEN r.id IS NOT NULL AND r.status = 'success' THEN 100
         WHEN e.id IS NOT NULL THEN 66
         WHEN s.status = 'completed' THEN 33
+        WHEN s.status = 'processing' THEN 10
         ELSE 0
     END as 처리_진행률,
     
@@ -840,7 +886,7 @@ LEFT JOIN erp_extractions e ON s.id = e.session_id
 LEFT JOIN erp_register_logs r ON e.id = r.extraction_id AND r.status = 'success'
 ORDER BY s.created_at DESC;
 
--- 디렉토리별 처리 현황 요약 뷰 (날짜별 폴더 지원)
+-- 디렉토리별 처리 현황 요약 뷰 (실제 Supabase 스키마 기준)
 CREATE OR REPLACE VIEW directory_processing_summary AS
 SELECT 
     CASE 
@@ -852,13 +898,22 @@ SELECT
     END as 디렉토리,
     COUNT(*) as 총_파일수,
     COUNT(CASE WHEN s.status = 'completed' THEN 1 END) as stt_완료수,
+    COUNT(CASE WHEN s.status = 'failed' THEN 1 END) as stt_실패수,
     COUNT(e.id) as erp_추출수,
     COUNT(CASE WHEN r.status = 'success' THEN 1 END) as erp_등록수,
+    COUNT(CASE WHEN r.status = 'failed' THEN 1 END) as erp_등록실패수,
     ROUND(
         COUNT(CASE WHEN r.status = 'success' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 1
     ) as 완료율,
+    ROUND(
+        COUNT(CASE WHEN s.status = 'completed' THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 1
+    ) as stt_완료율,
+    ROUND(
+        COUNT(e.id) * 100.0 / NULLIF(COUNT(CASE WHEN s.status = 'completed' THEN 1 END), 0), 1
+    ) as erp_추출율,
     MIN(s.created_at) as 최초_처리일시,
-    MAX(s.created_at) as 최근_처리일시
+    MAX(s.created_at) as 최근_처리일시,
+    AVG(s.processing_time) as 평균_처리시간
 FROM stt_sessions s
 LEFT JOIN erp_extractions e ON s.id = e.session_id
 LEFT JOIN erp_register_logs r ON e.id = r.extraction_id

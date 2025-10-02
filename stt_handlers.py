@@ -118,8 +118,20 @@ def clear_whisper_file_cache():
 
 def _create_simple_summary(transcript: str, erp_data: dict) -> str:
     """
-    패턴 매칭 기반 요약 생성 (고객센터 통화 특화)
+    GPT-4o 또는 패턴 매칭 기반 요약 생성 (고객센터 통화 특화)
     """
+    # TODO: GPT-4o 요약 기능 활성화 검토 후 주석 해제
+    # try:
+    #     # GPT-4o 요약기 사용 시도
+    #     from gpt_summarizer import get_gpt4o_summarizer
+    #     summarizer = get_gpt4o_summarizer()
+    #     if summarizer:
+    #         logger.info("GPT-4o 요약기 사용하여 요약 생성")
+    #         return summarizer.create_enhanced_summary(transcript, erp_data)
+    # except Exception as e:
+    #     logger.warning(f"GPT-4o 요약 실패, 패턴 매칭으로 폴백: {e}")
+    
+    # 기존 패턴 매칭 로직 (현재 활성화)
     try:
         import re
         

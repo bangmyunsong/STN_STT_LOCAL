@@ -347,7 +347,19 @@ def extract_customer_name(conversation_text: str) -> str:
     return "정보 없음"
 
 def analyze_request_context(conversation_text: str, stn_data: dict) -> str:
-    """STT 텍스트에서 요청사항의 문맥을 분석하여 의미있는 요청사항 생성 (개선된 버전)"""
+    """GPT-4o 또는 패턴 매칭 기반 요청사항 문맥 분석 (개선된 버전)"""
+    # TODO: GPT-4o 요청사항 분석 기능 활성화 검토 후 주석 해제
+    # try:
+    #     # GPT-4o 분석기 사용 시도
+    #     from gpt_summarizer import get_gpt4o_summarizer
+    #     summarizer = get_gpt4o_summarizer()
+    #     if summarizer:
+    #         logger.info("GPT-4o 분석기 사용하여 요청사항 분석")
+    #         return summarizer.analyze_request_context_gpt4o(conversation_text, stn_data)
+    # except Exception as e:
+    #     logger.warning(f"GPT-4o 요청사항 분석 실패, 패턴 매칭으로 폴백: {e}")
+    
+    # 기존 패턴 매칭 로직 (현재 활성화)
     if not conversation_text:
         return f"장애유형: {stn_data.get('장애유형', '정보 없음')}, 요청유형: {stn_data.get('요청유형', '정보 없음')}"
     

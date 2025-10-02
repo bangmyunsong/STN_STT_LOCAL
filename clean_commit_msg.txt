@@ -1,0 +1,13 @@
+feat: v1.2 업데이트 - GPT-4o 지원 및 하이브리드 요약 시스템
+
+- GPT-4o 기반 요약 및 분석 기능 추가 (gpt_summarizer.py)
+- 하이브리드 요약 시스템 구현 (패턴 매칭 + GPT-4o)
+- 환경변수 제어 및 폴백 시스템 추가
+- Supabase 스키마 최적화 (인덱스, 뷰 개선)
+- 원본 전사 결과 보존 기능 (original_transcript, original_segments)
+- 디렉토리별 처리 현황 뷰 확장
+- README 문서 업데이트 (v1.2 변경사항 반영)
+- stt_handlers.py, postprocessor.py에 GPT-4o 관련 코드 추가
+- config.env에 GPT-4o 설정 옵션 추가
+- .gitattributes 파일 추가로 UTF-8 인코딩 강제 적용
+- 한글 인코딩 문제 해결 및 Git 설정 최적화

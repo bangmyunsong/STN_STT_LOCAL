@@ -1,16 +1,16 @@
 # 🎙️ STN 고객센터 STT 시스템
 
-**Whisper STT + GPT-3.5-turbo 기반 ERP 항목 추출 및 연동 시스템 (v1.1)**
+**Whisper STT + GPT 기반 ERP 항목 추출 및 연동 시스템 (v1.2)**
 
-OpenAI의 Whisper 모델과 GPT-3.5-turbo를 활용하여 고객센터 통화 음성을 텍스트로 변환하고, 문맥 기반으로 ERP 등록 항목을 자동 추출하는 고급 시스템입니다.
+OpenAI의 Whisper 모델과 GPT-3.5-turbo/GPT-4o를 활용하여 고객센터 통화 음성을 텍스트로 변환하고, 문맥 기반으로 ERP 등록 항목을 자동 추출하는 고급 시스템입니다.
 
 ## ✨ 주요 기능
 
-### 🎯 핵심 기능 (v1.1)
+### 🎯 핵심 기능 (v1.2)
 - 🔊 **Whisper STT 배치 처리**: WAV, MP3 등 음성파일을 고정밀 텍스트로 변환
 - 👥 **화자 분리**: 상담원과 고객의 대화를 자동으로 구분
-- 🤖 **GPT 기반 ERP 항목 추출**: GPT-3.5-turbo로 ERP 등록용 JSON 데이터 자동 생성
-- 📊 **패턴 매칭 요약**: GPT API 없이 고성능 요약 생성 (v1.1 신규)
+- 🤖 **GPT 기반 ERP 항목 추출**: GPT-3.5-turbo/GPT-4o로 ERP 등록용 JSON 데이터 자동 생성
+- 📊 **지능형 요약 시스템**: 패턴 매칭 + GPT-4o 하이브리드 요약 (v1.2 신규)
 - 🔌 **ERP 연동 API**: REST API를 통한 ERP 시스템 연동 샘플
 - 🗄️ **Supabase 연동**: PostgreSQL 기반 데이터 저장 및 관리
 - 🎛️ **React 관리자 UI**: STT 결과 확인 및 ERP 추출 관리를 위한 현대적인 웹 대시보드
@@ -18,8 +18,13 @@ OpenAI의 Whisper 모델과 GPT-3.5-turbo를 활용하여 고객센터 통화 �
 - 📤 **파일 업로드**: 드래그 앤 드롭 기반 음성 파일 업로드 (v1.1 신규)
 - 🔄 **ERP 재추출**: 기존 세션에 대한 ERP 데이터 재추출 (v1.1 신규)
 - 🔧 **환경변수 관리**: 실시간 환경변수 상태 모니터링 (v1.1 신규)
+- ⚙️ **모델 선택**: GPT-3.5-turbo/GPT-4o 모델 선택 가능 (v1.2 신규)
 
-### 🚀 최신 개선사항 (v1.1)
+### 🚀 최신 개선사항 (v1.2)
+- **GPT-4o 지원**: GPT-4o 모델을 통한 향상된 요약 및 분석 정확도
+- **하이브리드 요약**: 패턴 매칭 + GPT-4o 선택적 사용으로 비용 최적화
+- **환경변수 제어**: GPT 모델 및 요약 방식 선택 가능
+- **폴백 시스템**: GPT-4o 실패 시 자동으로 패턴 매칭으로 전환
 - **성능 최적화**: 패턴 매칭 기반 요약으로 GPT API 호출 횟수 감소
 - **UX 개선**: ERP추출/ERP연동 옵션 연동 및 툴팁 추가
 - **파일 관리**: 월별/일별 폴더 자동 생성 및 파일 업로드 기능
@@ -87,6 +92,14 @@ SUPABASE_ANON_KEY=your_supabase_anon_key_here
 
 # HuggingFace Hub Token (화자 분리용)
 HUGGINGFACE_HUB_TOKEN=hf_your_token_here
+
+# GPT 모델 설정 (v1.2 신규)
+# GPT_MODEL=gpt-4o  # GPT-4o 사용 (비용 높음, 정확도 높음)
+# GPT_MODEL=gpt-3.5-turbo  # GPT-3.5-turbo 사용 (기본값, 비용 낮음)
+
+# GPT-4o 요약 기능 설정 (v1.2 신규)
+# USE_GPT4O_SUMMARY=true   # GPT-4o 요약 기능 활성화
+# USE_GPT4O_SUMMARY=false  # 패턴 매칭 요약 사용 (기본값)
 ```
 
 ### 4. Supabase 데이터베이스 설정
@@ -290,8 +303,16 @@ curl -X POST "http://localhost:8000/api/stt-process" \
 - 추출 규칙 세분화
 - 예시 데이터 확장
 
-### 패턴 매칭 요약 (v1.1 신규)
+### 지능형 요약 시스템 (v1.2 신규)
 
+패턴 매칭과 GPT-4o를 결합한 하이브리드 요약 시스템:
+
+#### 🔄 **하이브리드 요약 방식**
+- **GPT-4o 요약**: 향상된 정확도와 맥락 이해 (비용 높음)
+- **패턴 매칭 요약**: 고성능, 저비용 요약 (기본값)
+- **자동 폴백**: GPT-4o 실패 시 패턴 매칭으로 자동 전환
+
+#### 📊 **패턴 매칭 요약 (v1.1)**
 GPT API 호출 없이 고성능 요약을 생성하는 패턴 매칭 시스템:
 
 **구현된 패턴들:**
@@ -299,6 +320,11 @@ GPT API 호출 없이 고성능 요약을 생성하는 패턴 매칭 시스템:
 - **요청 유형 분석**: 장애신고, 기술지원, 문의사항, 긴급요청
 - **문제 상황 추출**: 장비-문제 조합 패턴 매칭
 - **시간/장소 정보**: 시간대, 지역, 건물 정보 추출
+
+#### 🤖 **GPT-4o 요약 (v1.2 신규)**
+- **향상된 정확도**: 복잡한 요청사항도 정확히 분석
+- **맥락 이해**: 기술적 용어와 업무 상황을 정확히 파악
+- **구조화된 출력**: 일관된 형식의 요약 생성
 
 **요약 형식:**
 ```
@@ -309,6 +335,14 @@ GPT API 호출 없이 고성능 요약을 생성하는 패턴 매칭 시스템:
 [핵심] [핵심 문장들]
 ```
 
+#### ⚙️ **설정 방법**
+```env
+# config.env에서 설정
+USE_GPT4O_SUMMARY=true   # GPT-4o 요약 활성화
+USE_GPT4O_SUMMARY=false  # 패턴 매칭 요약 사용 (기본값)
+GPT_MODEL=gpt-4o         # GPT-4o 모델 사용
+```
+
 ## 📁 프로젝트 구조
 
 ```
@@ -316,7 +350,8 @@ STN_STT_POC/
 ├── 🎯 핵심 모듈
 │   ├── api_server.py           # FastAPI 기반 REST API 서버
 │   ├── gpt_extractor.py        # GPT 기반 ERP 항목 추출 모듈
-│   ├── stt_handlers.py         # STT 처리 핸들러 (패턴 매칭 요약 포함)
+│   ├── gpt_summarizer.py       # GPT-4o 기반 요약 및 분석 클래스 (v1.2 신규)
+│   ├── stt_handlers.py         # STT 처리 핸들러 (하이브리드 요약 포함)
 │   ├── erp_handlers.py         # ERP 재추출 핸들러
 │   ├── admin_handlers.py       # 관리자 API 핸들러 (파일 업로드 포함)
 │   ├── supabase_client.py      # Supabase 데이터베이스 연동
@@ -397,23 +432,96 @@ STN_STT_POC/
     └── README.md               # 프로젝트 문서
 ```
 
-## 🗄️ 데이터베이스 스키마
+## 🗄️ 데이터베이스 스키마 (v1.2 업데이트)
 
-### STT 세션 테이블 (stt_sessions)
-- 음성 파일 처리 세션 정보
-- STT 결과 및 메타데이터 저장
+### 📊 STT 세션 테이블 (stt_sessions)
+음성 파일 처리 세션 정보 및 STT 결과 저장:
 
-### ERP 추출 테이블 (erp_extractions)
-- GPT로 추출된 ERP 항목 데이터
-- **기본 정보**: AS 및 지원, 요청기관, 작업국소
-- **일정 정보**: 요청일, 요청시간
-- **담당자 정보**: 요청자, 지원인원수, 지원요원
-- **장비 정보**: 장비명, 기종명, A/S기간만료여부
-- **요청 내용**: 시스템명(고객사명), 요청 사항 (패턴 매칭 요약)
+**기본 정보:**
+- `id`: 세션 고유 ID (SERIAL PRIMARY KEY)
+- `file_id`: 파일 고유 식별자 (VARCHAR(100) UNIQUE)
+- `file_name`: 파일명 (VARCHAR(255))
+- `model_name`: Whisper 모델명 (VARCHAR(50), 기본값: 'base')
+- `language`: 언어 설정 (VARCHAR(10))
 
-### ERP 등록 로그 (erp_register_logs)
-- ERP 시스템 연동 시도 기록
-- 성공/실패 상태 및 응답 데이터
+**STT 결과:**
+- `transcript`: 후처리된 전사 결과 (TEXT)
+- `segments`: 세그먼트 정보 (JSONB)
+- `original_transcript`: 원본 전사 결과 (TEXT) - v1.2 신규
+- `original_segments`: 원본 세그먼트 정보 (JSONB) - v1.2 신규
+
+**처리 정보:**
+- `processing_time`: 처리 시간 (FLOAT)
+- `status`: 처리 상태 (VARCHAR(20), 기본값: 'processing')
+- `created_at`: 생성 시간 (TIMESTAMP WITH TIME ZONE)
+- `updated_at`: 수정 시간 (TIMESTAMP WITH TIME ZONE)
+
+### 📋 ERP 추출 테이블 (erp_extractions)
+GPT로 추출된 ERP 항목 데이터 저장:
+
+**기본 정보:**
+- `id`: 추출 결과 고유 ID (SERIAL PRIMARY KEY)
+- `session_id`: STT 세션 ID (INTEGER, 외래키)
+- `as_지원`: 지원 방식 (VARCHAR(50))
+- `요청기관`: 고객사 또는 기관명 (VARCHAR(200))
+- `작업국소`: 지역 또는 위치 (VARCHAR(100))
+
+**일정 정보:**
+- `요청일`: 요청 날짜 (VARCHAR(20), YYYY-MM-DD 형식) - v1.2 수정
+- `요청시간`: 요청 시간 (TEXT)
+
+**담당자 정보:**
+- `요청자`: 고객 담당자 이름 (VARCHAR(100))
+- `지원인원수`: 필요한 지원 인원 수 (VARCHAR(20))
+- `지원요원`: 투입 예정 기술자 이름 (VARCHAR(100))
+
+**장비 정보:**
+- `장비명`: 장비 종류 (VARCHAR(100))
+- `기종명`: 구체적인 장비 모델명 (VARCHAR(100))
+- `as_기간만료여부`: A/S 기간 상태 (VARCHAR(20))
+
+**요청 내용:**
+- `시스템명`: 고객사 시스템명 (VARCHAR(200))
+- `요청사항`: 고객 요청 내용 요약 (TEXT)
+
+**추가 정보:**
+- `confidence_score`: 추출 신뢰도 (FLOAT)
+- `raw_extraction`: 원본 추출 데이터 (JSONB)
+- `created_at`: 생성 시간 (TIMESTAMP WITH TIME ZONE)
+
+### 📝 ERP 등록 로그 (erp_register_logs)
+ERP 시스템 연동 시도 기록:
+
+**기본 정보:**
+- `id`: 로그 고유 ID (SERIAL PRIMARY KEY)
+- `extraction_id`: ERP 추출 결과 ID (INTEGER, 외래키)
+- `erp_id`: ERP 시스템 ID (VARCHAR(50))
+- `status`: 등록 상태 (VARCHAR(20), 'success' 또는 'failed')
+- `response_data`: ERP 시스템 응답 데이터 (JSONB)
+- `registered_at`: 등록 시도 시간 (TIMESTAMP WITH TIME ZONE)
+
+### 🔍 인덱스 및 뷰 (v1.2 신규)
+
+#### **성능 최적화 인덱스:**
+- `idx_stt_sessions_file_id`: 파일 ID 조회 최적화
+- `idx_stt_sessions_created_at`: 생성일시 조회 최적화
+- `idx_stt_sessions_file_name`: 파일명 조회 최적화
+- `idx_stt_sessions_status`: 처리 상태 조회 최적화
+- `idx_erp_extractions_요청기관`: 요청기관별 조회 최적화
+- `idx_erp_extractions_작업국소`: 작업국소별 조회 최적화
+
+#### **처리 상태 뷰 (audio_file_processing_status):**
+- **파일 정보**: 전체파일경로, 디렉토리, 파일명
+- **STT 정보**: 세션 ID, 모델, 상태, 처리시간, 전사결과
+- **ERP 정보**: 추출여부, 신뢰도, 모든 ERP 필드
+- **등록 정보**: 등록여부, ERP ID, 등록상태
+- **진행률**: 전체 처리 진행률 (0-100%)
+
+#### **디렉토리별 요약 뷰 (directory_processing_summary):**
+- **통계 정보**: 총 파일수, STT 완료수, ERP 추출수, ERP 등록수
+- **성공률**: 완료율, STT 완료율, ERP 추출율
+- **시간 정보**: 최초/최근 처리일시, 평균 처리시간
+- **디렉토리 지원**: `src_record/YYYY-MM-DD/` 구조 지원
 
 ## 🔧 STT 텍스트 후처리
 
@@ -455,6 +563,12 @@ STT 결과의 정확도를 높이기 위한 후처리 시스템이 구현되어 
 - **전문 용어**: 업계 표준 용어 사용 권장
 - **구조화된 대화**: 문제 → 위치 → 요청 순서로 대화 진행
 
+### 🚀 GPT-4o 활용 팁 (v1.2 신규)
+- **고정확도 요약**: 복잡한 요청사항이 많은 경우 GPT-4o 요약 활성화
+- **비용 최적화**: 일반적인 요청은 패턴 매칭, 복잡한 요청은 GPT-4o 사용
+- **환경변수 제어**: `USE_GPT4O_SUMMARY=true`로 GPT-4o 요약 활성화
+- **폴백 시스템**: GPT-4o 실패 시 자동으로 패턴 매칭으로 전환되어 안정성 보장
+
 ### 🎛️ React UI 활용 팁
 - **월별/일별 조회**: 모든 메뉴에서 특정 기간 데이터만 필터링하여 빠른 분석
 - **실시간 모니터링**: STT 모니터링에서 처리 상태 실시간 확인
@@ -463,11 +577,18 @@ STT 결과의 정확도를 높이기 위한 후처리 시스템이 구현되어 
 - **환경변수 확인**: 설정 메뉴에서 시스템 상태 실시간 모니터링 (v1.1 신규)
 - **ERP 재추출**: 세션 관리에서 기존 세션의 ERP 데이터 재추출 (v1.1 신규)
 
-### 📊 패턴 매칭 요약 활용 (v1.1 신규)
+### 📊 요약 시스템 활용
+#### 패턴 매칭 요약 (v1.1)
 - **고성능**: GPT API 호출 없이 빠른 요약 생성
 - **정확도**: 고객센터 통화 특화 패턴으로 높은 정확도
 - **비용 절약**: GPT API 사용량 감소로 비용 절약
 - **실시간**: STT 처리와 동시에 요약 생성
+
+#### GPT-4o 요약 (v1.2 신규)
+- **고정확도**: 복잡한 요청사항도 정확히 분석
+- **맥락 이해**: 기술적 용어와 업무 상황을 정확히 파악
+- **구조화된 출력**: 일관된 형식의 요약 생성
+- **폴백 시스템**: 실패 시 자동으로 패턴 매칭으로 전환
 
 ## 🛠️ 문제 해결
 
@@ -478,6 +599,15 @@ STT 결과의 정확도를 높이기 위한 후처리 시스템이 구현되어 
 # API 키 오류
 Error: OpenAI API 키가 설정되지 않았습니다.
 해결: config.env에서 OPENAI_API_KEY 확인
+
+# GPT-4o 모델 오류 (v1.2 신규)
+Error: GPT-4o 모델에 접근할 수 없습니다.
+해결: OpenAI 계정에 GPT-4o 접근 권한이 있는지 확인
+해결: GPT_MODEL=gpt-3.5-turbo로 변경하여 폴백 사용
+
+# GPT-4o 요약 초기화 실패
+Error: GPT-4o 요약기 초기화 실패
+해결: USE_GPT4O_SUMMARY=false로 설정하여 패턴 매칭 사용
 ```
 
 #### Supabase 연결 오류
@@ -534,10 +664,16 @@ Error: 환경변수 상태를 확인할 수 없습니다
 
 ---
 
-**STN 고객센터 STT 시스템 v1.1** - 2025.01.19  
-*Whisper STT + GPT-3.5-turbo 기반 ERP 항목 추출 및 연동 시스템*  
+**STN 고객센터 STT 시스템 v1.2** - 2025.01.19  
+*Whisper STT + GPT 기반 ERP 항목 추출 및 연동 시스템*  
 *React + TypeScript 현대적 관리자 UI*
 
 ### 📝 변경 이력
+- **v1.2 (2025.01.19)**: 
+  - GPT-4o 지원 및 하이브리드 요약 시스템
+  - 환경변수 제어 및 폴백 시스템
+  - 데이터베이스 스키마 최적화 (인덱스, 뷰 개선)
+  - 원본 전사 결과 보존 기능 (original_transcript, original_segments)
+  - 디렉토리별 처리 현황 뷰 확장
 - **v1.1 (2025.01.19)**: 패턴 매칭 요약, 파일 업로드, ERP 재추출, 환경변수 관리, UX 개선
 - **v1.0 (2025.01.11)**: 초기 버전, 기본 기능 구현
